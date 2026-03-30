@@ -1,0 +1,431 @@
+
+#ifndef EYEMODEL_H__
+#define EYEMODEL_H__
+
+#include "common/types.h"
+#include "mathHelper.h"
+#include <thread>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
+#include <list>
+#include <atomic>
+#define DEBUG_LOG1
+namespace singleeyefitter {
+
+
+    /*
+	    
+        Observation class
+
+        Hold data which is precalculated for every new observation
+        Every observation is shared between different models
+
+    */
+    class Observation {
+        std::shared_ptr<const Detector2DResult> mObservation2D;
+        std::pair<Circle,Circle> mUnprojectedCirclePair;
+        Line mProjectedCircleGaze;
+
+
+    public:
+        Observation(std::shared_ptr<const Detector2DResult> observation, double focalLength) :
+            mObservation2D(observation)
+        {
+                const double circleRadius = 1.0;
+                // Do a per-image unprojection of the pupil ellipse into the two fixed
+                // sized circles that would project onto it. The size of the circles
+                // doesn't matter here, only their center and normal does.
+                mUnprojectedCirclePair = unproject(mObservation2D->ellipse, circleRadius , focalLength);
+                 // Get projected circles and gaze vectors
+                //
+                // Project the circle centers and gaze vectors down back onto the image
+                // plane. We're only using them as line parametrisations, so it doesn't
+                // matter which of the two centers/gaze vectors we use, as the
+                // two gazes are parallel and the centers are co-linear.
+                const auto& c = mUnprojectedCirclePair.first.center;
+                const auto& v = mUnprojectedCirclePair.first.normal;
+                Vector2 cProj = project(c, focalLength);
+                Vector2 vProj = project(v + c, focalLength) - cProj;
+                vProj.normalize();
+				mProjectedCircleGaze = Line(cProj, vProj);
+
+				//test
+				//{
+				//	const auto& c2 = mUnprojectedCirclePair.second.center;
+				//	const auto& v2 = mUnprojectedCirclePair.second.normal;
+				//	Vector2 cProj2 = project(c2, focalLength);
+				//	Vector2 vProj2 = project(v2 + c2, focalLength) - cProj2;
+				//	vProj2.normalize();
+				//	
+				//	Vector2 dir = cProj2 - cProj;
+				//	if (dir(0) == 0 || vProj2(0) == 0 || vProj(0) == 0)
+				//	{
+				//	}
+				//	else
+				//	{
+				//		std::cout << "p2p:" << dir(1) / dir(0) << "  normal1:" << vProj(1) / cProj(0) << "  normal2:" << vProj2(1) / vProj2(0) << std::endl;
+				//	}
+				//	
+				//}
+
+        }
+        Observation( const Observation& that ) = delete; // forbid copying
+        Observation( Observation&& that ) = delete; // forbid moving
+        Observation() = delete; // forbid default construction
+        const std::shared_ptr<const Detector2DResult> getObservation2D() const { return mObservation2D;};
+        const std::pair<Circle,Circle>& getUnprojectedCirclePair() const { return mUnprojectedCirclePair; };
+        const Line& getProjectedCircleGaze() const { return mProjectedCircleGaze; };
+
+    };
+
+    typedef std::shared_ptr<const Observation> ObservationPtr;
+
+
+class EyeModel {
+
+        typedef singleeyefitter::Sphere<double> Sphere;
+    public:
+
+        EyeModel( int modelId, double timestamp,  double focalLength, Vector3 cameraCenter, int initialUncheckedPupils = 3, double binResolution = 0.05  );
+        EyeModel(const EyeModel&) = delete;
+        //EyeModel(EyeModel&&); // we need a explicit 1/Move constructor because of the mutex
+        ~EyeModel();
+
+		//*******************************************************
+		//功    能： 【根据瞳孔的观测信息2D以及平均帧率，计算瞳孔3D信息，以及检测的置信度以及置信度的权重】
+		//            
+		//输入参数： 
+		//     [in]          observation                               2D 瞳孔的观测信息
+		//     [in]          averageFramerate                          当前取像的平均帧率
+		//返 回 值：
+		//     计算瞳孔3D信息，以及检测的置信度以及置信度的权重
+		//修改日志：
+		//*******************************************************
+        std::pair<Circle,ConfidenceValue> presentObservation(const ObservationPtr observation, double averageFramerate  );
+
+		//*******************************************************
+		//功    能： 【获得当前用的球，即经过refineWithEdges函数进行优化的眼球】
+		//            备注：优化方式是让瞳孔边界点离3D瞳孔投影2D图像上的边界最小；
+		//输入参数： 
+		//
+		//返 回 值：
+		//     返回优化后，即当前用的球
+		//修改日志：
+		//*******************************************************
+        Sphere getSphere() const;
+		//*******************************************************
+		//功    能： 【获得粗略计算的眼球，利用瞳孔法向量交出眼球中心，半径是瞳孔中心到球心的距离】
+		//            
+		//输入参数： 
+		//
+		//返 回 值：
+		//     返回粗略计算的球心；
+		//修改日志：
+		//*******************************************************
+        Sphere getInitialSphere() const;
+
+        // how sensitive the model is for wrong observations
+        // if we have to many wring observation new models are created
+        // void setSensitivity( float sensitivity ); NOT USED
+
+        // Describing how good different properties of the Eye are
+
+		//*******************************************************
+		//功    能： 【获得瞳孔位置在拟合眼球中的均匀分布程度，返回值越大，说明采集的样本越充足】
+		//            
+		//输入参数： 
+		//   
+		//返 回 值：
+		//     
+		//修改日志：
+		//*******************************************************
+        double getMaturity() const ; // How much spatial variance there is
+
+		//*******************************************************
+		//功    能： 【返回检测3D瞳孔的置信度】
+		//            
+		//输入参数： 
+		//   
+		//返 回 值：
+		//     
+		//修改日志：
+		//*******************************************************
+        double getConfidence() const; // How much do we believe in this model
+
+		//*******************************************************
+		//功    能： 【返回检测3D瞳孔的置信度】
+		//            
+		//输入参数： 
+		//   
+		//返 回 值：
+		//     
+		//修改日志：
+		//*******************************************************
+        double getPerformance() const; // How much do we believe in this model
+
+		//*******************************************************
+		//功    能： 【返回检测3D瞳孔的置信度变换的梯度】
+		//            
+		//输入参数： 
+		//   
+		//返 回 值：
+		//     
+		//修改日志：
+		//*******************************************************
+        double getPerformanceGradient() const;
+
+		//*******************************************************
+		//功    能： 【优化前后视线角度差cos的平均值，越大越好】
+		//            
+		//输入参数： 
+		//   
+		//返 回 值：
+		//     
+		//修改日志：
+		//*******************************************************
+        double getSolverFit() const ; // The residual of the sphere calculation
+		
+		//*******************************************************
+		//功    能： 【获得模型的ID】
+		//            
+		//输入参数： 
+		//   
+		//返 回 值：
+		//     
+		//修改日志：
+		//*******************************************************
+        int getModelID() const { return mModelID; };
+
+		//*******************************************************
+		//功    能： 【获得模型声明的时间】
+		//            
+		//输入参数： 
+		//   
+		//返 回 值：
+		//     
+		//修改日志：
+		//*******************************************************
+        double getBirthTimestamp() const { return mBirthTimestamp; };
+
+        // ----- Visualization --------
+        std::vector<Vector3> getBinPositions() const {return mBinPositions;};
+        // ----- Visualization END --------
+
+
+    private:
+
+
+        struct PupilParams {
+            double theta, psi, radius;
+            PupilParams() : theta(0), psi(0), radius(0) {};
+            PupilParams(double theta, double psi, double radius) : theta(theta), psi(psi), radius(radius){};
+        };
+
+        struct Pupil{
+            Circle mCircle;                                                                            // 反向映射两个圆中正确的一个；
+            PupilParams mParams;
+            const ObservationPtr mObservationPtr;
+            Pupil( const ObservationPtr observationPtr ) : mObservationPtr( observationPtr ){};
+        };
+
+
+
+
+		//*******************************************************
+		//功    能： 【内，被initialiseModel调用】【计算眼球中心，Z轴=57和半径=1内部固定】
+		//            主要使用mSupportingPupils成员变量中的信息，并且此处确定2D瞳孔反向投影的唯一圆；
+		//输入参数： 
+		//    [in]    use_ransac      是否使用ransac算法拟合球心在二维的投影；
+		//返 回 值：
+		//     Sphere 返回眼球，z=57，r=1；
+		//修改日志：
+		//*******************************************************
+        Sphere findSphereCenter( bool use_ransac = true);
+
+		//*******************************************************
+		//功    能： 【计算眼球中心，Z轴根据球的半径确定和半径内部固定=12】
+		//            主要使用mSupportingPupils成员变量中的信息，此处获得initialiseModel[i].mparams的表示；
+		//输入参数： 
+		//    
+		//返 回 值：
+		//     Sphere 返回眼球半径为12mm，其他根据激活获得；
+		//修改日志：
+		//*******************************************************
+        Sphere initialiseModel();
+
+		//*******************************************************
+		//功    能： 【1、利用图像瞳孔边缘点到3D圆重投影边界的距离最小，优化球心+3*3D圆参数，2、计算优化前后视线向量的的一致性，并返回】
+		//            此处使用了ceres
+		//输入参数： 
+		//    [in/out]    sphere       眼球,其实内部有用mSupportingPupils
+		//
+		//返 回 值：
+		//     计算优化前后视线向量的的一致性
+		//修改日志：
+		//*******************************************************
+        double refineWithEdges( Sphere& sphere  );
+
+		//*******************************************************
+		//功    能： 【瞳孔所有的信息包括2D和3D，导入到mSupportingPupils中】
+		//            mSupportingPupilsToAdd --> mSupportingPupils
+		//            此处需要获得线程锁，因为mSupportingPupils不支持多线程同时访问；
+		//            mSupportingPupils会在用重建眼球模型中
+		//输入参数： 
+		//    
+		//
+		//返 回 值：
+		//     获得线程锁后，返回OK
+		//修改日志：
+		//*******************************************************
+        bool tryTransferNewObservations();
+
+		//*******************************************************
+		//功    能： 【给检测的瞳孔3D位置打一个分数；1、分数值（方向投影和眼球交线处在的两个3D圆的normal应该对齐是最好的）；
+		//                                           2、权重（相机和眼球中心的连线与initialisedCircle法向量之间的角度，角度越大越好，（因为如果角度为零，说明我们人眼此时正在看相机））】
+		//            
+		//输入参数： 
+		//    [in]     unprojectedCircle                            2d椭圆反向投影后确定的3D圆（备注：其中一个指向球心的被干掉了）
+		//    [in]     initialisedCircle                            相机中心和瞳孔中心的连线与眼球的交点，确定的3D圆；
+		//    [in]     confidence                                   参与权重的计算；
+		//返 回 值：
+		//     返回3D瞳孔检测得分以及相应得分的权重
+		//修改日志：
+		//*******************************************************
+        ConfidenceValue calculateModelOberservationFit(const Circle&  unprojectedCircle, const Circle& initialisedCircle, double confidence) const;
+
+		//*******************************************************
+		//功    能： 【根据图像采集的帧率，更新mPerformance窗口的大小，计算出mPerformanceGradient值，即检测性能变换的梯度】
+		//            
+		//输入参数： 
+		//    [in]     observation_fit                            一个瞳孔3D位置检测的分数和权值
+		//    [in]     averageFramerate                           平均帧率
+		//返 回 值：
+		//     返回3D瞳孔检测得分以及相应得分的权重
+		//修改日志：
+		//*******************************************************
+        void updatePerformance( const ConfidenceValue& observation_fit,  double averageFramerate);
+
+		//*******************************************************
+		//功    能： 【计算反向投影得到的圆与优化后的3D的法向量夹角】
+		//            
+		//输入参数： 
+		//    [in]     observation_fit                            一个瞳孔3D位置检测的分数和权值
+		//    [in]     averageFramerate                           平均帧率
+		//返 回 值：
+		//     返回3D瞳孔检测得分以及相应得分的权重
+		//修改日志：
+		//*******************************************************
+        double calculateModelFit(const Circle&  unprojectedCircle, const Circle& optimizedCircle) const;
+
+		//*******************************************************
+		//功    能： 【检测瞳孔在3D空间中的相关性，如果此瞳孔位置以前存在，则返回false，不存在返回true】
+		//            
+		//输入参数： 
+		//    [in]     circle                             反向投影的3D圆
+		//返 回 值：
+		//     
+		//修改日志：
+		//*******************************************************
+        bool isSpatialRelevant(const Circle& circle);
+
+		//*******************************************************
+		//功    能： 【确定反向投影圆中的一个】
+		//            球心和瞳孔方向在图像平面的投影的乘积确定；
+		//输入参数： 
+		//    [in]     sphere                             眼球
+		//    [in]     circles                            瞳孔反向投影的圆（2个）；    
+		//返 回 值：
+		//     返回OK的圆
+		//修改日志：
+		//*******************************************************
+        const Circle& selectUnprojectedCircle(const Sphere& sphere, const std::pair<const Circle, const Circle>& circles) const;
+
+		//*******************************************************
+		//功    能： 【根据初始化好的眼球（中心和半径已知）和瞳孔中心与相机中心连线的交点，重新优化瞳孔信息（3D圆，瞳孔参数）】
+		//            
+		//输入参数： 
+		//    [in]     sphere                             眼球
+		//    [in/out]     pupil                          瞳孔信息；    
+		//返 回 值：
+		//     
+		//修改日志：
+		//*******************************************************
+        void initialiseSingleObservation( const Sphere& sphere, Pupil& pupil) const;
+		
+		//*******************************************************
+		//功    能： 【根据瞳孔和相机中心直线，和眼球的交点（选择其中一个）作为3D瞳孔位置】
+		//            3D瞳孔位置可以通过直线和球的交点获得；
+		//输入参数： 
+		//    [in]     sphere                             眼球
+		//    [in]     circles                            瞳孔反向投影的圆（1个）；    
+		//返 回 值：
+		//     返回OK的圆
+		//修改日志：
+		//*******************************************************
+        Circle getIntersectedCircle( const Sphere& sphere, const Circle& circle) const;
+		
+
+
+		//*******************************************************
+		//功    能： 【根据3D瞳孔的球坐标返回3D瞳孔笛卡尔坐标】
+		//            球心和瞳孔方向在图像平面的投影的乘积确定；
+		//输入参数： 
+		//    [in]     eye                             眼球
+		//    [in]     params                          3D瞳孔的球坐标；    
+		//返 回 值：
+		//     返回OK的圆
+		//修改日志：
+		//*******************************************************
+        Circle circleFromParams(const Sphere& eye,const  PupilParams& params) const;
+
+
+
+
+
+
+
+
+
+
+
+
+        std::unordered_map<Vector2, bool, math::matrix_hash<Vector2>> mSpatialBins;           // 用来存储3D瞳孔法向量，用来检测新来的3D瞳孔是否在原来的集合中存在
+        std::vector<Vector3> mBinPositions; // for visualization
+
+        mutable std::mutex mModelMutex;
+        std::mutex mPupilMutex;
+        std::thread mWorker;
+        Clock::time_point mLastModelRefinementTime;
+
+
+        // Factors which describe how good certain properties of the model are
+        //std::list<double> mModelSupports; // values to calculate the average
+        double mSolverFit; // Residual of Ceres sovler , Thread sensitive
+
+        math::WMA<double> mPerformance; // moving Average of model support
+        float mPerformanceWindowSize;  // in seconds
+        double mPerformanceGradient;   // Performance表现的后向差分，分母为当前时间-mLastPerformanceCalculationTime
+        Clock::time_point mLastPerformanceCalculationTime; // for the gradient calculation when need keep track of the time
+
+        const double mFocalLength;
+        const Vector3 mCameraCenter;
+		const int mInitialUncheckedPupils;            // 起到保护作用，防止瞳孔拟合眼球是的数据过少，此值默认设置为3
+		const double mBinResolution;                  // 检测瞳孔法向量的表示粒度（默认设置为0.05）
+		const int mTotalBins;                         // 即瞳孔不同位置的个数；
+		const int mModelID;                           // 用来标记眼球模型
+		double mBirthTimestamp;                       // 此模型声明的时间
+
+		Sphere mSphere;                               // Thread sensitive
+		Sphere mInitialSphere;                        // Thread sensitive
+		std::vector<Pupil> mSupportingPupils;         // just used within the worker thread, Thread sensitive
+		int mSupportingPupilSize;                     // Thread sensitive, use this to get the SupportedPupil size
+
+        // observations are saved here and only if needed transfered to mObservation
+        // since mObservations needs a mutex
+        std::vector<Pupil> mSupportingPupilsToAdd;    // 添加瞳孔信息；
+};
+
+
+} // singleeyefitter
+#endif /* end of include guard: EYEMODEL_H__ */

@@ -1,0 +1,14 @@
+build/
+.codex-build/
+.vscode/
+log/
+output/*.avi
+result/*.csv
+results/*.csv
+*.o
+*.obj
+*.so
+*.a
+*.swp
+*.swo
+.DS_Store

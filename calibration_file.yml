@@ -1,0 +1,87 @@
+%YAML:1.0
+---
+screen_width: 1920
+screen_height: 1080
+if_send_coordinate_data: 0
+port_name: ""
+scene_camera_id: 2
+eye_camera_right_id: 6
+eye_camera_left_id : 6
+#单位mm
+#场景相机内参和畸变参数
+scene_camera_intrinsic_matrix: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 4.4678111431510933e+02, 0., 3.2245705942254307e+02, 0.,
+         4.4772269717201539e+02,2.4019082674710654e+02, 0., 0., 1.]
+scene_camera_distortion_coefficients: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ -1.0398568637768068e-02, -5.2443622473359243e-02,
+         -9.9168758488841482e-04, 3.7555260552715368e-03,
+         3.7501535965389951e-02 ]       
+#右眼相机内参和畸变参数
+eye_camera_intrinsic_matrix_right: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 5.4302626547400666e+02, 0. ,3.3419697572624159e+02, 0.,
+         5.4094758277133121e+02, 2.5983426274541654e+02, 0., 0., 1. ]
+eye_camera_distortion_coefficients_right: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ -1.0453489105254991e-01, 4.9218330986319253e-01,
+            2.6082132869518341e-03, 2.3297307154930111e-03,
+            -1.3533200493808022e+00 ]   
+#右眼相机到场景相机的旋转和平移
+eye_camera_right_to_scene_camera_rotation: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ -0.865676277267349, -0.1035404027416913, 0.4897795095516271,
+           -0.2509245720582597, 0.9363424745447646, -0.2455598287602569,
+           -0.4331759943878737, -0.3354730322447332, -0.8365502988599078 ]
+eye_camera_right_to_scene_camera_translation: !!opencv-matrix
+   rows: 3
+   cols: 1
+   dt: d
+   data: [ 58.84425340359473, -113.2945147505238, 58.0700135484077 ]   
+#左眼相机内参和畸变参数
+eye_camera_intrinsic_matrix_left: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 777.598586727608, 0, 290.274367732162,
+         0, 770.675455625097, 236.607744724502,
+         0, 0, 1 ]
+eye_camera_distortion_coefficients_left: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ -0.0695693343254078, 0.531304460065513, 0, 0, 0 ]    
+#左眼相机到场景相机的旋转和平移
+eye_camera_left_to_scene_camera_rotation: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ -0.990525924916947, 0.0705033049323868, 0.117845984492634,
+         0.0876501147659667, 0.985199037853388, 0.147310261673357,
+         -0.105715890238602, 0.156243847259247, -0.982044810965716 ]
+eye_camera_left_to_scene_camera_translation: !!opencv-matrix
+   rows: 3
+   cols: 1
+   dt: d
+   data: [ -71.3945769115594, 13.0717035188488, -41.6628235164918 ]   
+#凝视点序列的坐标
+gaze_point_sequence: !!opencv-matrix
+   rows: 4
+   cols: 3
+   dt: d
+   data: [ 0, 37, -99,
+           0, 37, 99,
+           0, -37, -99,
+           0, -37, 99 
+   ]
