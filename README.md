@@ -2,7 +2,7 @@
 
 `PupilGaze` 是一个基于 C++、OpenCV 和 Ceres Solver 的双目眼动追踪与 Kappa 角标定项目。程序同时读取 1 路场景相机和 2 路眼部相机，利用 ArUco 标定板估计屏幕位姿，结合瞳孔检测与 3D 眼球模型重建，完成 Kappa 角标定与凝视点估计。
 
-项目当前仍处在实验性开发阶段，但主流程已经比较清晰：先建立左右眼球模型，再采集 Kappa 标定数据，计算 Kappa 角，最后进入双目凝视点估计。
+项目路线：先建立左右眼球模型，再采集 Kappa 标定数据，计算 Kappa 角，最后进入双目凝视点估计。
 
 ## 功能概览
 
@@ -200,18 +200,10 @@ cd build
 - `output/right_eye_video.avi`
 - `output/left_eye_video.avi`
 
-## 已知情况
+## 演示视频
 
-- 仓库中保留了历史 `build/` 与 `log/` 目录，它们是旧产物，不应视为当前源码状态的唯一依据。
-- 历史构建目录仍引用旧工程路径 `kappa_calibration_opencv4`，说明该项目经历过目录迁移或重命名。
-- 仓库原本存在 `result/` 目录，但当前代码实际写入的是 `results/`。
-- 我没有在当前执行环境里重新完成一次本地编译验证，因为环境中缺少 `cmake` 可执行文件。
+<video src="assets/demo.mp4" controls width="960">
+  你的 Markdown 查看器如果不支持内嵌视频，可直接打开下方链接观看。
+</video>
 
-## 第三方代码与许可证线索
-
-源码中可以直接看到部分第三方来源：
-
-- `src/shared_modules/calibration/` 中的 `bundleCalibration.*` 和 `common.h` 带有 `Pupil Labs` 的 LGPL v3 头注释
-- `src/shared_modules/pupil_detectors/singleeyefitter/DistancePointEllipse.h` 带有 Boost Software License 注释
-
-仓库根目录目前没有统一的 `LICENSE` / `COPYING` 文件。如果计划公开发布或二次分发，建议补齐许可证文件和第三方归属说明。
+[点击查看演示视频](assets/demo.mp4)
