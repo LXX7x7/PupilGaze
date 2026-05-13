@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 #include "glog/logging.h"
 #include "./src/api/gazeTracingM.h"
 #include "./src/shared_modules/pupil_detectors/singleeyefitter/EyeModelFitter.h"
@@ -12,11 +13,13 @@
 #include "tool.hpp"
 #include "geometry.h"
 #include "state.h"
+#include "ellseg_feature.h"
 
 int main()
 {
     // ========== 初始化参数 ==========
     std::string calibrate_file_name = "../calibration_file.yml";
+    std::string ellseg_model_file = "../EllSeg/weights/ellseg_ritnet_v3.pt";
     cv::Mat gaze_point_sequence;  // 凝视点序列
     
     // ========== 设备对象 ==========
@@ -35,6 +38,16 @@ int main()
     // ========== 跟踪器对象 ==========
     CGazeTrakingM gaze_tracker_right;
     CGazeTrakingM gaze_tracker_left;
+    EllSegFeatureExtractor ellseg_feature_extractor;
+
+    if(std::filesystem::exists(ellseg_model_file))
+    {
+        if(!ellseg_feature_extractor.Load(ellseg_model_file))
+        {
+            std::cerr<<"ELLSeg模型加载失败: "
+                     <<ellseg_feature_extractor.LastError()<<std::endl;
+        }
+    }
     
     // ========== Kappa角存储 ==========
     KappaAngle kappa_angle;
@@ -68,7 +81,8 @@ int main()
                                           gaze_tracker_right,
                                           gaze_tracker_left,
                                           eye_model_right,
-                                          eye_model_left);
+                                          eye_model_left,
+                                          &ellseg_feature_extractor);
             break;
             
         case GazeState::CALIBRATE_KAPPA:

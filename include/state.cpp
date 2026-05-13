@@ -268,7 +268,8 @@ GazeState handleEyeModel(
     CGazeTrakingM& gaze_tracker_right,
     CGazeTrakingM& gaze_tracker_left,
     GeometryEyeModel& eye_model_right,
-    GeometryEyeModel& eye_model_left)
+    GeometryEyeModel& eye_model_left,
+    EllSegFeatureExtractor* ellseg_feature_extractor)
 {
     // 读取帧
     cv::Mat scene_frame,eye_frame_right, eye_frame_left;
@@ -276,6 +277,43 @@ GazeState handleEyeModel(
     read_susccess &= scene_camera.readFrame(scene_frame);
     read_susccess &= eye_camera_right.readFrame(eye_frame_right);
     read_susccess &= eye_camera_left.readFrame(eye_frame_left);
+    if(!read_susccess || scene_frame.empty() || eye_frame_right.empty() || eye_frame_left.empty())
+    {
+        std::cerr<<"眼球模型重建时读取图像失败"<<std::endl;
+        return GazeState::RUNNING;
+    }
+
+    // ELLSeg 只负责从眼部图像中提取轻量化分割、latent 和椭圆特征。
+    if(ellseg_feature_extractor != nullptr && ellseg_feature_extractor->IsLoaded())
+    {
+        EllSegFeature ellseg_right_feature;
+        EllSegFeature ellseg_left_feature;
+        const bool is_ellseg_right = ellseg_feature_extractor->Extract(eye_frame_right, ellseg_right_feature);
+        const std::string ellseg_right_error = ellseg_feature_extractor->LastError();
+        const bool is_ellseg_left = ellseg_feature_extractor->Extract(eye_frame_left, ellseg_left_feature);
+        const std::string ellseg_left_error = ellseg_feature_extractor->LastError();
+
+        if(is_ellseg_right && ellseg_right_feature.pupil.valid)
+        {
+            std::cout<<"ELLSeg右眼瞳孔中心: ("
+                     <<ellseg_right_feature.pupil.center.x<<", "
+                     <<ellseg_right_feature.pupil.center.y<<")"<<std::endl;
+        }
+        if(is_ellseg_left && ellseg_left_feature.pupil.valid)
+        {
+            std::cout<<"ELLSeg左眼瞳孔中心: ("
+                     <<ellseg_left_feature.pupil.center.x<<", "
+                     <<ellseg_left_feature.pupil.center.y<<")"<<std::endl;
+        }
+        if(!is_ellseg_right)
+        {
+            std::cerr<<"ELLSeg右眼特征提取失败: "<<ellseg_right_error<<std::endl;
+        }
+        if(!is_ellseg_left)
+        {
+            std::cerr<<"ELLSeg左眼特征提取失败: "<<ellseg_left_error<<std::endl;
+        }
+    }
 
     // 右眼处理
     cv::Mat eye_frame_right_gray;

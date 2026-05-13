@@ -7,6 +7,7 @@
 // #include "common/types.h"
 // #include "./src/api/gazeTracingM.h"
 #include "geometry.h"
+#include "ellseg_feature.h"
 #include <filesystem>
 
 #ifndef STATE_H
@@ -230,7 +231,8 @@ GazeState handleEyeModel(
     CGazeTrakingM& gaze_tracker_right,
     CGazeTrakingM& gaze_tracker_left,
     GeometryEyeModel& eye_model_right,
-    GeometryEyeModel& eye_model_left);
+    GeometryEyeModel& eye_model_left,
+    EllSegFeatureExtractor* ellseg_feature_extractor = nullptr);
 /**
  * @brief 标定kappa角
  * 

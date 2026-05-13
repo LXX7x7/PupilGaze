@@ -9,6 +9,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Boost REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(Torch QUIET)
+
+if(Torch_FOUND)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+endif()
 
 include_directories(${Boost_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -40,6 +45,7 @@ set(PROJECT_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/include/geometry.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/include/state.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/ellseg_feature.cpp"
 )
 
 file(GLOB MODULE_SRCS
@@ -60,3 +66,11 @@ file(GLOB MODULE_SRCS
 add_executable(KappaCalibrate ${PROJECT_SRCS} ${MODULE_SRCS})
 
 target_link_libraries(KappaCalibrate ${Boost_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES} ${LAPACK_LIBRARIES})
+
+if(Torch_FOUND)
+  target_compile_definitions(KappaCalibrate PRIVATE PUPILGAZE_WITH_LIBTORCH)
+  target_include_directories(KappaCalibrate PRIVATE ${TORCH_INCLUDE_DIRS})
+  target_link_libraries(KappaCalibrate ${TORCH_LIBRARIES})
+else()
+  message(STATUS "LibTorch not found; EllSegFeatureExtractor will be built as an interface stub.")
+endif()

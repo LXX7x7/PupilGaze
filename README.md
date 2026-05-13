@@ -12,6 +12,7 @@
 
 - 三路视频采集：场景相机、左眼相机、右眼相机
 - 2D/3D 瞳孔检测与单眼 3D 眼球模型重建
+- ELLSeg 轻量化眼部特征提取：分割图、latent 特征、瞳孔/虹膜椭圆
 - 基于 ArUco GridBoard 的场景坐标系姿态估计
 - Kappa 角采集、CSV 保存与均值计算
 - 双目视线交会的凝视点估计
@@ -26,7 +27,7 @@
 2. `RUNNING`
    实时显示右眼、左眼、场景三路画面，并等待键盘输入。
 3. `EYE_MODEL`
-   对左右眼图像做瞳孔检测，重建 3D 眼球模型。
+   对左右眼图像做瞳孔检测，重建 3D 眼球模型；如果已加载 ELLSeg TorchScript 模型，则同步提取眼部分割、latent 和椭圆特征。
 4. `CALIBRATE_KAPPA`
    在已知参考凝视点下采集眼球中心、瞳孔中心和真实凝视点，保存到 CSV。
 5. `CALCULATE_KAPPA`
@@ -60,9 +61,14 @@ PupilGaze/
 ├── calibration_file.yml
 ├── main.cpp
 ├── include/
+│   ├── ellseg_feature.h / ellseg_feature.cpp
 │   ├── geometry.h / geometry.cpp
 │   ├── state.h / state.cpp
 │   └── tool.hpp
+├── EllSeg/
+│   ├── export_libtorch.py
+│   ├── models/
+│   └── weights/
 ├── src/
 │   ├── api/
 │   │   ├── gazeTracingM.h
@@ -90,6 +96,7 @@ PupilGaze/
 - 封装 `Camera`
 - 定义 `GeometryEyeModel`
 - 实现初始化、运行、模型重建、Kappa 标定、凝视估计、退出等状态
+- 在 `EYE_MODEL` 状态下可选调用 ELLSeg 特征提取器
 
 ### `include/geometry.h` / `include/geometry.cpp`
 
@@ -97,6 +104,18 @@ PupilGaze/
 - Kappa 角计算与 CSV 读写
 - ArUco 标定板检测
 - 单目线面求交与双目视线最短连线中点求凝视点
+
+### `include/ellseg_feature.h` / `include/ellseg_feature.cpp`
+
+ELLSeg 的 C++ 接入层，负责加载由 `EllSeg/export_libtorch.py` 导出的 TorchScript 模型，并从单帧眼部图像中提取：
+
+- `segmentation`：恢复到原始眼图尺寸的语义分割标签图
+- `latent_feature`：ELLSeg 编码器输出的轻量化特征
+- `ellipse_regression`：ELLSeg 椭圆回归头输出的原始参数
+- `pupil` / `iris`：基于分割区域拟合得到的瞳孔和虹膜椭圆
+- `overlay`：分割图和椭圆叠加后的可视化结果
+
+当前主流程仍保留原有 `CGazeTrakingM` 的 3D 眼球模型重建逻辑，ELLSeg 作为可选特征提取模块接入，后续可继续替换或融合原有瞳孔检测输入。
 
 ### `src/api/`
 
@@ -148,6 +167,7 @@ PupilGaze/
 - Ceres Solver
 - Eigen
 - glog / gflags
+- LibTorch（可选，用于启用 ELLSeg C++ 推理）
 
 从仓库中历史 `build/` 链接信息可以推断，这个项目曾在以下组合上构建过：
 
@@ -174,6 +194,45 @@ sudo apt install -y \
 cmake -S . -B build
 cmake --build build -j
 ```
+
+如果需要启用 ELLSeg 的 C++ 推理，需要额外安装或解压 LibTorch，并在 CMake 配置时提供 `Torch_DIR`。例如：
+
+```bash
+cmake -S . -B build -DTorch_DIR=/path/to/libtorch/share/cmake/Torch
+cmake --build build -j
+```
+
+如果 CMake 没有找到 LibTorch，项目仍会构建 `EllSegFeatureExtractor` 的同名接口，但不会执行实际 ELLSeg 推理。
+
+## ELLSeg 模型导出与接入
+
+ELLSeg 代码位于 `EllSeg/` 目录。C++ 侧不直接加载 Python 权重文件，而是加载 `export_libtorch.py` 导出的 TorchScript 模型。
+
+导出示例：
+
+```bash
+cd EllSeg
+python export_libtorch.py \
+  --command export \
+  --weights ./weights/all.git_ok \
+  --output ./weights/ellseg_ritnet_v3.pt
+```
+
+导出的默认模型路径为：
+
+```text
+EllSeg/weights/ellseg_ritnet_v3.pt
+```
+
+`main.cpp` 默认按相对路径 `../EllSeg/weights/ellseg_ritnet_v3.pt` 查找该模型。因此推荐从 `build/` 目录运行可执行文件；如果模型文件存在且工程启用了 LibTorch，程序会在启动时尝试加载 ELLSeg。
+
+ELLSeg 导出的 TorchScript 包装层输入为单通道眼图张量：
+
+```text
+[1, 1, 240, 320]
+```
+
+C++ 侧 `EllSegFeatureExtractor` 会自动完成灰度转换、宽度对齐、居中补边/裁剪和均值方差归一化，并将模型输出的分割图恢复到原始眼图尺寸。
 
 ## 运行方式
 
